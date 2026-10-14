@@ -1,5 +1,5 @@
 ---
-status: "acked 2026-10-14 #6edaac91"
+status: "acked 2026-10-14 #6f47efe3"
 effort: E3
 ---
 
@@ -11,7 +11,7 @@ idlefx has a workspace but no shared core and no content: `idlefx-core` is an em
 
 ## Goal
 
-`idlefx-companion` shows a procedurally animated dog in a small floating window with a transparent background, on Hyprland and on GNOME, in two sizes: std (1x) and large (2x). It walks, sits, lies down and sleeps on its own, follows the time of day, reacts to a mouse click, and reacts to events sent with `idlefx-companion poke <event>`. It renders at up to 60fps only while something moves fast, never uses more than 10% of a core, and uses well under 1% while it sleeps. It runs on reusable `idlefx-core` pieces: terminal session, transparent half-block canvas, frame loop with a CPU budget.
+`idlefx-companion` shows a procedurally animated dog in a small floating window with a transparent background, on Hyprland and on GNOME. It walks, sits, lies down and sleeps on its own, follows the time of day, reacts to a mouse click, and reacts to events sent with `idlefx-companion poke <event>`. It renders at up to 60fps only while something moves fast, never uses more than 10% of a core, and uses well under 1% while it sleeps. It runs on reusable `idlefx-core` pieces: terminal session, transparent half-block canvas, frame loop with a CPU budget.
 Said:
 - "companion: a creature (dog, cute alien/animal...)"
 - "lives in a standalone, isolated (systemd-run ?) process in a dedicated floating terminal"
@@ -20,12 +20,11 @@ Said:
 - reactions: "Self + you + events" (its own routine, time of day, mouse petting, an event socket with a poke command)
 - art: "Try procedural first, we might change this afterwards"
 - desktop: "Both equally" (Hyprland and GNOME)
-- "keep std (1x) and large (2x) sizes"
+- "only keep std size, i will better understand when i will see it. Remove the extra sizes."
 - "Try to keep CPU under 10% under all circunstances."
 Assumed:
-- 2x scales both width and height: std is a 48x14-cell window (96x28 pixels, dog about 30x20 pixels), large 96x28 cells (192x56 pixels, dog about 60x40)
-- the size is chosen at start with `--size std|large` (default std), on both the companion and `launch`; changing size means relaunching
-- the dog is drawn natively at each size from the same geometry (smoother curves when larger), not by enlarging the std dog's pixels; its behaviour and timing are the same at both sizes
+- one terminal cell is 1 pixel wide and 2 pixels tall; the dog is about 30x20 pixels (about 270x180 screen pixels with foot's default font)
+- the default window is 64x16 cells (a 64x32-pixel canvas, about 580x290 screen pixels with foot's default font); `launch --window COLSxROWS` tries other sizes; the dog keeps its size and wanders the width of whatever window it gets
 - "under 10%" means 10% of one core, for the dog's whole window (foot and the companion together) when launched with `launch`, and for the companion process alone otherwise; when the budget is tight, a lower frame rate while moving is preferred over stutter
 - v1 event names: `hello`, `thinking`, `success`, `failure`, `commit`; any other name is ignored
 - night is 22:00 to 07:00 local time: the dog sleeps unless woken, and goes back to sleep after a reaction
@@ -34,7 +33,7 @@ Assumed:
 - Claude Code and git hooks are documented as snippets, not installed in the user's settings
 - the ship brainstorm answers are recorded in `crates/ship/AGENTS.md` as part of this work, so they are not lost
 - Hyprland's rule syntax changed across versions: the rules file is written for the Hyprland you run, and I'll ask for `hyprctl version` before writing it
-- this machine (over SSH) has neither Hyprland nor GNOME, so the window checks of S8, foot's share of the CPU, and the look of S4 are confirmed by you on your desktop
+- this machine (over SSH) has neither Hyprland, GNOME nor foot, so the window checks of S8, foot's share of the CPU, and the look of S4 are confirmed by you on your desktop; `launch` is tested here with a stand-in for foot
 
 ## Out of scope
 
@@ -42,23 +41,16 @@ The ship game and the idle game (beyond recording the ship brainstorm), other cr
 
 ## Constraints
 
-- CPU never above 10% of one core, in any state, at either size. Enforced twice: the launched unit has `CPUQuota=10%` (foot and the companion together), and the core's frame loop keeps the app under its CPU budget by lowering the frame rate before the quota throttles it.
-- CPU of the companion process, one core, Linux `/proc` accounting, averaged over 10 s:
-
-  | Size | Asleep | Idle awake | Walking |
-  |---|---|---|---|
-  | std | under 1% | under 3% | under 6% |
-  | large | under 1% | under 3% | under 8% |
-
-  The process limits stay below 10% so foot's share of the unit's quota has room.
-- Resident memory under 32 MB at both sizes.
+- CPU never above 10% of one core, in any state. Enforced twice: the launched unit has `CPUQuota=10%` (foot and the companion together), and the core's frame loop keeps the app under its CPU budget by lowering the frame rate before the quota throttles it.
+- CPU of the companion process in the default 64x16 window, one core, Linux `/proc` accounting, averaged over 10 s: under 1% asleep, under 3% idle awake (breathing, looking around), under 6% walking. These stay below 10% so foot's share of the unit's quota has room.
+- Resident memory under 32 MB.
 - Frame rates: up to 60fps while walking or reacting (lowered to 30 or 20 by the CPU budget if needed); at most 6fps for small idle motion (breathing, blinking, sleep); no frame at all when nothing changes.
 - A poke or a mouse click shows its reaction within 100 ms.
 - No heap allocation per frame once the window size is stable (AGENTS.md rule).
 - Every frame wrapped in synchronized output; the terminal is restored on exit and on panic.
 - The rendering rules of AGENTS.md hold: time-based animation, fixed simulation timestep with interpolation, springs or easing for motion.
 - Transparent pixels are drawn with the terminal's default background, so foot's `colors.alpha` shows the desktop through them; dog pixels are opaque, without anti-aliasing.
-- The window runs in foot under `systemd-run --user` with `CPUQuota=10%` and `MemoryMax=64M`, at both sizes.
+- The window runs in foot under `systemd-run --user` with `CPUQuota=10%` and `MemoryMax=64M`.
 - New dependencies limited to small, pure-Rust crates (local time, randomness); third-party versions already in `Cargo.lock` do not change.
 - Clippy clean with `-D warnings` across the workspace.
 
@@ -87,43 +79,42 @@ Accepted when:
 
 ## S3 — Core: frame loop with activity levels and a CPU budget
 
-`idlefx_core::run(app, options)` drives an `App`: a fixed simulation step of 1/120 s (`update`), a draw per frame with the interpolation factor (`draw`), and the app's `activity()` after each step: `Active` (up to 60fps), `Idle(n)` (n fps, at most 6), or `Asleep` (no frames; the loop blocks until input, a resize, an outside wake-up or the app's next timer). Outside threads wake the loop through a handle (`Waker`) carrying an app event. Input events (keys, mouse, resize) reach `App::event`. A `--frames N` style benchmark option and frame stats stay available to every app.
-The options carry a CPU budget (a share of one core). The loop measures CPU use over a sliding 2 s window: from its own systemd unit's cgroup (`cpu.stat`) when it runs in one, so the terminal's rendering counts too, otherwise from the process (`/proc/self/stat`). Above 90% of the budget it steps the `Active` rate down (60 → 30 → 20fps); back under 60% for 5 s, it steps up again. The simulation keeps real time whatever the frame rate.
+`idlefx_core::run(app, options)` drives an `App`: a fixed simulation step of 1/120 s (`update`), a draw per frame with the interpolation factor (`draw`), and the app's `activity()` after each step: `Active` (up to 60fps), `Idle(n)` (n fps, at most 6), or `Asleep` (no frames after the current one; the loop blocks until input, a resize, an outside wake-up or the app's next timer). Outside threads wake the loop through a handle (`Waker`) carrying an app event. Input events (keys, mouse, resize) reach `App::event`. A `--frames N` style benchmark option and frame stats stay available to every app.
+The options carry a CPU budget (a share of one core). The loop measures CPU use over a sliding 2 s window: from its own cgroup's `cpu.stat` when that cgroup is a systemd `.service` unit (as `launch` creates), so the terminal's rendering counts too; otherwise, for example in a login session's `.scope`, from the process (`/proc/self/stat`). Above 90% of the budget it steps the `Active` rate down (60 → 30 → 20fps); back under 60% for 5 s, it steps up again. The simulation keeps real time whatever the frame rate.
 Accepted when:
 - an app reporting `Active` renders between 55 and 62 fps when it is well under budget
 - an app reporting `Idle(4)` renders between 3.5 and 4.5 fps over 5 s
-- an app reporting `Asleep` writes no frame and uses under 0.1 s of CPU in 10 s
+- an app reporting `Asleep` writes no frame after its first one and uses under 0.1 s of CPU in 10 s
 - a `Waker` event sent to a sleeping app reaches `App::event` and produces a frame within 50 ms
-- a deliberately expensive test app with a 10% budget drops its frame rate and stays under 10% CPU averaged over 10 s
-- the budget reads the cgroup's `cpu.stat` when the process runs in a systemd unit, and `/proc/self/stat` otherwise
+- a deliberately expensive test app with a 10% budget drops its frame rate and, after a 2 s warm-up, stays under 10% CPU averaged over 10 s
+- the budget reads the cgroup's `cpu.stat` when the process's cgroup is a `.service` unit, and `/proc/self/stat` otherwise
 - with a slow terminal, frames are skipped rather than queued: the simulation keeps real time
 
 ## S4 — Dog: procedural body and animation
 
-The dog is drawn from parts on a light skeleton: body, chest, head, snout, two ears, tail, four legs, eye, nose. Its geometry is defined in dog units and drawn natively at a scale of 1 (std) or 2 (large), so the large dog has smoother curves, not bigger pixels; eye and nose keep a readable minimum size. A pose is a set of targets (body height and tilt, head angle, ear lift, tail angle and wag, leg angles); critically damped springs move every part toward the current pose's targets, so a change of pose blends instead of jumping. On top: a walk cycle whose leg phase follows the actual ground speed (no foot sliding), tail wag as an oscillator whose amplitude follows the mood, breathing, blinking, and ears that lag a little behind head motion. Poses: stand, walk, sit, lie, sleep (curled, slow breathing, a small `z` drifting up), happy (fast wag, small hop), sad (ears and tail down), curious (head tilt). The dog faces left or right and turns through a short squash rather than an instant flip. One palette: a warm tan coat, darker ears and tail tip, white chest, black eye and nose. A snapshot option renders a chosen pose at a chosen size to the terminal for review.
+The dog is drawn from parts on a light skeleton: body, chest, head, snout, two ears, tail, four legs, eye, nose, about 30x20 pixels standing. A pose is a set of targets (body height and tilt, head angle, ear lift, tail angle and wag, leg angles); critically damped springs move every part toward the current pose's targets, so a change of pose blends instead of jumping. On top: a walk cycle whose leg phase follows the actual ground speed (no foot sliding), tail wag as an oscillator whose amplitude follows the mood, breathing, blinking, and ears that lag a little behind head motion. Poses: stand, walk, sit, lie, sleep (curled, slow breathing, a small `z` drifting up), happy (fast wag, small hop), sad (ears and tail down), curious (head tilt). The dog faces left or right and turns through a short squash rather than an instant flip. One palette: a warm tan coat, darker ears and tail tip, white chest, black eye and nose. A snapshot option renders a chosen pose to the terminal for review.
 Accepted when:
-- each of the 8 poses renders through the snapshot option without a panic at both sizes, inside canvases of 96x28 (std) and 192x56 (large) pixels
-- the dog's bounding box at large is 2 times its std bounding box, within 2 pixels
-- between any two poses, no part moves more than 2 pixels times the scale between two consecutive 60fps frames (a continuity test over every pose pair, at both sizes)
-- while walking, the planted foot moves less than 1 pixel times the scale against the ground per stride
-- the user, looking at it in foot at both sizes, finds the dog reads as a cute dog and moves smoothly (manual)
+- each of the 8 poses renders through the snapshot option without a panic, inside a 64x32 pixel canvas
+- standing, the dog's bounding box is between 26 and 34 pixels wide and between 16 and 24 pixels tall
+- between any two poses, no part moves more than 2 pixels between two consecutive 60fps frames (a continuity test over every pose pair)
+- while walking, the planted foot moves less than 1 pixel against the ground per stride
+- the user, looking at it in foot, finds the dog reads as a cute dog and moves smoothly (manual)
 
 ## S5 — Dog: behaviour
 
-A behaviour state machine on top of the poses: idle (stand, look around, scratch), wander (walk to a random spot in the window, easing in and out), sit, lie down, sleep, and the reactions (happy, sad, curious). Idle states pick the next one by weighted randomness with randomized durations (a seed option makes runs repeatable). Time of day biases the choice: from 22:00 to 07:00 it goes to sleep and stays asleep unless something wakes it, then returns to sleep within a minute; the first wake-up after 07:00 starts with a stretch and a yawn. Behaviour works in dog units, so it is the same at both sizes; walking speed in pixels scales with the size. Each state reports the frame-loop activity it needs: walking and reactions `Active`, breathing and blinking `Idle(n)`, and between two blinks or `z`s nothing moves, so the loop sleeps. A trace option writes one line per state change (time, from, to, cause) to a file. A headless simulate option (start time, duration) runs the behaviour on a fake clock, faster than real time and without a terminal, for tests.
+A behaviour state machine on top of the poses: idle (stand, look around, scratch), wander (walk to a random spot in the window, easing in and out), sit, lie down, sleep, and the reactions (happy, sad, curious). Idle states pick the next one by weighted randomness with randomized durations (a seed option makes runs repeatable). Time of day biases the choice: from 22:00 to 07:00 it goes to sleep and stays asleep unless something wakes it, then returns to sleep within a minute; the first wake-up after 07:00 starts with a stretch and a yawn. Each state reports the frame-loop activity it needs: walking and reactions `Active`, breathing and blinking `Idle(n)`, and between two blinks or `z`s nothing moves, so the loop sleeps. A trace option writes one line per state change (time, from, to, cause) to a file. A headless simulate option (start time, duration) runs the behaviour on a fake clock, faster than real time and without a terminal, for tests.
 Accepted when:
 - with a fixed seed, a headless 10-minute daytime simulation visits idle, wander, sit, lie and sleep at least once each (trace file)
-- with a fixed seed, the headless simulation gives the same sequence of states at std and large
 - in a headless simulation starting at 23:30, the dog is asleep within 2 simulated minutes and stays asleep for the next 10 simulated minutes without input
-- the process CPU limits of the Constraints hold for the asleep, idle and walking states at both sizes (measured from `/proc` over 10 s each, in a real terminal session of the matching size)
+- the process CPU limits of the Constraints hold for the asleep, idle and walking states (measured from `/proc` over 10 s each, in a real 64x16 terminal session)
 - the trace file shows each state change with its cause
 
 ## S6 — Interaction: mouse
 
-Mouse reporting is on in the companion's window. A left click on a dog pixel is petting: the happy reaction (fast wag, hop, a small heart rising) for 2 to 4 seconds. A left click elsewhere in the window makes the dog look at the spot, then walk to it. Clicks wake a sleeping dog; at night it goes back to sleep afterwards. Hit testing uses the dog's drawn pixels, so it follows the size. `q` and Ctrl-C quit.
+Mouse reporting is on in the companion's window. A left click on a dog pixel is petting: the happy reaction (fast wag, hop, a small heart rising) for 2 to 4 seconds. A left click elsewhere in the window makes the dog look at the spot, then walk to it. Clicks wake a sleeping dog; at night it goes back to sleep afterwards. Hit testing uses the dog's drawn pixels. `q` and Ctrl-C quit.
 Accepted when:
-- an SGR mouse click on a dog pixel starts the happy reaction within 100 ms, at both sizes (trace file)
-- a click on an empty spot makes the dog walk and stop within 2 pixels times the scale of that x position (trace file)
+- an SGR mouse click on a dog pixel starts the happy reaction within 100 ms (trace file)
+- a click on an empty spot makes the dog walk and stop within 2 pixels of that x position (trace file)
 - a click wakes a sleeping dog (trace file)
 - `q` quits within 1 s and the terminal is restored
 
@@ -139,26 +130,27 @@ Accepted when:
 
 ## S8 — Window: launch on Hyprland and GNOME
 
-`idlefx-companion launch [--size std|large]` (or the shipped script it mirrors) starts the window as an isolated user unit: `systemd-run --user --unit=idlefx-companion --collect -p CPUQuota=10% -p MemoryMax=64M foot --config=<shipped foot.ini> --app-id=idlefx-companion --window-size-chars=<per size> idlefx-companion --size <size>`, with 48x14 characters for std and 96x28 for large. A second launch while it runs does nothing. The shipped `foot.ini` sets a fully transparent default background (`colors.alpha=0`), no client-side decorations, no padding. Hyprland: a shipped rules file to `source` makes the window float, pinned on every workspace, borderless, without shadow, blur or rounding, not focused on open, at the bottom-right of the screen; it matches by app id, so it works at both sizes. GNOME: a small shipped GNOME Shell extension recognises the window by its app id and keeps it above other windows, on all workspaces, at the bottom-right; install steps are in the companion's AGENTS.md.
+`idlefx-companion launch [--window COLSxROWS]` (or the shipped script it mirrors) starts the window as an isolated user unit: `systemd-run --user --unit=idlefx-companion --collect -p CPUQuota=10% -p MemoryMax=64M foot --config=<shipped foot.ini> --app-id=idlefx-companion --window-size-chars=<COLSxROWS> idlefx-companion`, with 64x16 by default. A second launch while it runs does nothing. The shipped `foot.ini` sets a fully transparent default background (`colors.alpha=0`), no client-side decorations, no padding. Hyprland: a shipped rules file to `source` makes the window float, pinned on every workspace, borderless, without shadow, blur or rounding, not focused on open, at the bottom-right of the screen; it matches by app id, so it works at any window size. GNOME: a small shipped GNOME Shell extension recognises the window by its app id and keeps it above other windows, on all workspaces, at the bottom-right; install steps are in the companion's AGENTS.md.
 Accepted when:
 - `launch` starts the unit with `CPUQuota=10%` and `MemoryMax=64M`, visible in `systemctl --user show idlefx-companion`
-- `launch --size large` passes `--window-size-chars=96x28` to foot and `--size large` to the companion
+- `launch` passes `--window-size-chars=64x16` to foot by default, and `--window 80x20` passes `--window-size-chars=80x20`
 - a second `launch` exits 0 and leaves exactly one unit running
-- on Hyprland, the dog appears floating, borderless, on every workspace, with the desktop visible around it, at both sizes (manual)
-- on GNOME, with the extension enabled, the dog stays above other windows on every workspace, with the desktop visible around it, at both sizes (manual)
-- on the user's desktop, the unit's CPU stays under 10% while the large dog walks, with motion still smooth (manual, `systemctl --user status idlefx-companion` or `systemd-cgtop`)
+- on Hyprland, the dog appears floating, borderless, on every workspace, with the desktop visible around it (manual)
+- on GNOME, with the extension enabled, the dog stays above other windows on every workspace, with the desktop visible around it (manual)
+- on the user's desktop, the unit's CPU stays under 10% while the dog walks, with motion still smooth (manual, `systemctl --user status idlefx-companion` or `systemd-cgtop`)
 
 ## S9 — Docs: what was decided
 
-The repo records what the brainstorm settled. Root AGENTS.md: the core's role and first pieces (session, canvas, loop with its CPU budget). `crates/companion/AGENTS.md`: the dog, its two sizes, the 10% CPU ceiling, its states and reactions, the events, the launch and desktop setup, the hook snippets. `crates/ship/AGENTS.md`: the ship answers: keyboard as the standard input with an optional gamepad, an in-terminal control panel (sliders, knobs) if keyboard precision is not enough, several cameras (cockpit, top, side) especially for big ships, realistic piloting feel without extra realism, accelerated travel time.
+The repo records what the brainstorm settled. Root AGENTS.md: the core's role and first pieces (session, canvas, loop with its CPU budget). `crates/companion/AGENTS.md`: the dog, its window size and the `--window` option, the 10% CPU ceiling, its states and reactions, the events, the launch and desktop setup, the hook snippets. `crates/ship/AGENTS.md`: the ship answers: keyboard as the standard input with an optional gamepad, an in-terminal control panel (sliders, knobs) if keyboard precision is not enough, several cameras (cockpit, top, side) especially for big ships, realistic piloting feel without extra realism, accelerated travel time.
 Accepted when:
 - `crates/ship/AGENTS.md` states the five ship answers
-- `crates/companion/AGENTS.md` lists the two sizes, the 10% CPU ceiling, the 5 events, the launch command, and the Hyprland and GNOME setup steps
+- `crates/companion/AGENTS.md` gives the default window size and the `--window` option, the 10% CPU ceiling, the 5 events, the launch command, and the Hyprland and GNOME setup steps
 - root AGENTS.md describes the core's three pieces
 
 ## Decisions
 
-- 2026-10-14: sizes are std (1x) and large (2x); an xlarge (4x, 192x56 cells, close to a full 1080p screen) was dropped as too big.
+- 2026-10-14: one dog size only (std). Large (2x) and XL (4x) were dropped: the sizing math (1 cell = 1x2 pixels, a 5x window around a 4x dog fills the screen) is easier to judge once the std dog is on screen; `launch --window` lets the user try window sizes meanwhile.
 - 2026-10-14: the 10% CPU ceiling covers the whole launched unit (foot and the companion), enforced by `CPUQuota=10%` and by the frame loop's CPU budget, which lowers the frame rate before the quota throttles.
+- 2026-10-14: the first version of this spec gave a 48x14-cell window a 96x28-pixel canvas; a cell is 1 pixel wide and 2 tall, so that was wrong. The default window is now 64x16 cells (64x32 pixels).
 
 ## Open questions
