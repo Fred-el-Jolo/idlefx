@@ -1,7 +1,11 @@
-[package]
-name = "idlefx"
+[workspace]
+members = ["crates/core", "crates/companion", "crates/ship"]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
+idlefx-core = { path = "crates/core" }
 ratatui = "0.30.2"

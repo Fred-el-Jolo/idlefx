@@ -1,4 +1,6 @@
-//! idlefx — plasma prototype.
+//! plasma — the idlefx plasma prototype.
+//!
+//! Run: `cargo run --release --example plasma [-- --frames N]`.
 //!
 //! A half-block framebuffer (2 truecolor pixels per cell) rendered through
 //! ratatui at 60fps, each frame wrapped in synchronized output.
@@ -248,7 +250,7 @@ fn main() -> io::Result<()> {
     let max_frames = match parse_frames() {
         Ok(n) => n,
         Err(e) => {
-            eprintln!("idlefx: {e}\nusage: idlefx [--frames N]");
+            eprintln!("plasma: {e}\nusage: plasma [--frames N]");
             std::process::exit(2);
         }
     };

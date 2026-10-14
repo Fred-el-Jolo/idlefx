@@ -1,7 +1,8 @@
 # idlefx
 
-Idle things that live in a terminal — generative art, a small game, or an idle
-companion (not decided yet) — with **stunning, smooth animations**.
+Things that live in a terminal with **stunning, smooth animations**: idle
+companions, and a spaceship game with realistic flight (Star Citizen-like
+6DOF), both built on one shared rendering core.
 
 ## Goals
 
@@ -10,12 +11,27 @@ companion (not decided yet) — with **stunning, smooth animations**.
 - **Smooth.** 60fps when things move, no tearing, no flicker, no stutter.
 - **Idle-friendly.** Runs all day in a spare pane. When nothing moves, frame
   rate drops (~2fps or sleep). CPU usage at rest must be negligible.
-- **One renderer, many ideas.** Build a solid rendering core first; art, game
-  and companion are content on top of it.
+- **One renderer, many ideas.** Build a solid rendering core first; the
+  companion and the ship game are content on top of it.
+
+## Layout
+
+One Cargo workspace, one repo:
+
+- `crates/core` — `idlefx-core`, the shared library: terminal setup and
+  restore, half-block framebuffer, frame loop, input. Its API is not designed
+  yet. The plasma prototype is its example: `cargo run --release --example plasma`.
+- `crates/companion` — `idlefx-companion`, the idle companions (binary).
+- `crates/ship` — `idlefx-ship`, the spaceship game (binary).
+
+Each sub-project has its own `AGENTS.md` for its scope and rules; this file
+holds what they share. Shared dependency versions live in the root
+`Cargo.toml` under `[workspace.dependencies]`.
 
 ## Stack
 
-- **Rust** (stable, edition 2024), single static binary.
+- **Rust** (stable, edition 2024, pinned in `mise.toml`), one static binary
+  per sub-project.
 - **ratatui** — immediate-mode TUI, cell buffer with frame diffing.
 - **crossterm** — backend: raw mode, alternate screen, input, synchronized output.
 - **tachyonfx** — shader-like effects and transitions on ratatui buffers.
@@ -23,8 +39,11 @@ companion (not decided yet) — with **stunning, smooth animations**.
   bg = bottom pixel, so each cell is 2 truecolor pixels. Braille / octants are
   options for finer, monochrome-ish detail.
 
-Target terminals: Ghostty, Kitty, WezTerm (truecolor, DEC mode 2026, GPU
-rendering). Kitty graphics protocol is out of scope unless decided otherwise.
+Target terminals: foot, Kitty, Ghostty, WezTerm (truecolor, DEC mode 2026).
+foot is the daily terminal and renders on the CPU, so it is the performance
+stress test; Kitty is the reference for the Kitty keyboard protocol (key
+release events). Kitty graphics protocol is out of scope unless decided
+otherwise.
 
 ## Rendering rules
 
@@ -41,13 +60,14 @@ rendering). Kitty graphics protocol is out of scope unless decided otherwise.
 
 - **Art:** shader-style `f(x, y, t) -> rgb` scenes — plasma, flow fields,
   boids, reaction–diffusion, starfields.
-- **Game:** small idle/incremental game with a real simulation loop.
-- **Companion:** a sprite with a state machine (idle / sleep / react) that
-  reacts to time of day, git activity, CPU load, etc. Could also live in a
-  Claude Code pane or status line.
+- **Ship:** realistic spaceship flight — see `crates/ship/AGENTS.md`.
+- **Companion:** a sprite with a state machine (idle / sleep / react) — see
+  `crates/companion/AGENTS.md`.
 
-## First milestone
+## First milestone (done)
 
 A ~150-line prototype: half-block framebuffer → ratatui buffer → diffed,
-synchronized output, rendering a plasma effect at 60fps. Judge smoothness
-in the target terminals before building anything else.
+synchronized output, rendering a plasma effect at 60fps. Smoothness judged
+fine in the target terminals; it now lives in `crates/core/examples/plasma.rs`.
+
+Next: design the core API (to brainstorm before any spec).

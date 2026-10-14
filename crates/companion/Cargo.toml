@@ -1,0 +1,7 @@
+[package]
+name = "idlefx-companion"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+idlefx-core.workspace = true
