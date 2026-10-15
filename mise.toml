@@ -50,7 +50,7 @@ description = "Send an event to the running dog: hello, thinking, success, failu
 run = "cargo run --release -q -p idlefx-companion -- poke"
 
 [tasks.stats]
-description = "CPU and memory of the running dog every 2 s (and of its launched unit, foot included)"
+description = "CPU and memory of the running dog every 2 s (and of its launched unit, terminal included)"
 shell = "bash -c"
 run = """
 pid=$(pgrep -n -x idlefx-companio) || { echo 'idlefx-companion is not running'; exit 0; }
@@ -68,9 +68,9 @@ while sleep 2; do
   line=$(awk -v a="$p0" -v b="$p1" -v hz="$hz" -v rss="$rss" \
     'BEGIN {printf "dog  cpu %5.2f%%  rss %5.1f MB", (b - a) / hz / 2 * 100, rss / 1024}')
   if [ -n "$cg" ]; then
-    u1=$(usec); mem=$(cat "$cg/memory.current")
-    line+=$(awk -v a="$u0" -v b="$u1" -v m="$mem" \
-      'BEGIN {printf "   |   unit  cpu %5.2f%% of 10%%  mem %5.1f MB of 64", (b - a) / 2e6 * 100, m / 1048576}')
+    u1=$(usec); mem=$(cat "$cg/memory.current"); max=$(cat "$cg/memory.max")
+    line+=$(awk -v a="$u0" -v b="$u1" -v m="$mem" -v x="$max" \
+      'BEGIN {printf "   |   unit  cpu %5.2f%% of 10%%  mem %5.1f MB of %s", (b - a) / 2e6 * 100, m / 1048576, x == "max" ? "max" : x / 1048576}')
     u0=$u1
   fi
   echo "$(date +%T)  $line"

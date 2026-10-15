@@ -152,5 +152,6 @@ Accepted when:
 - 2026-10-14: one dog size only (std). Large (2x) and XL (4x) were dropped: the sizing math (1 cell = 1x2 pixels, a 5x window around a 4x dog fills the screen) is easier to judge once the std dog is on screen; `launch --window` lets the user try window sizes meanwhile.
 - 2026-10-14: the 10% CPU ceiling covers the whole launched unit (foot and the companion), enforced by `CPUQuota=10%` and by the frame loop's CPU budget, which lowers the frame rate before the quota throttles.
 - 2026-10-14: the first version of this spec gave a 48x14-cell window a 96x28-pixel canvas; a cell is 1 pixel wide and 2 tall, so that was wrong. The default window is now 64x16 cells (64x32 pixels).
+- 2026-10-15: `launch` defaults to kitty (`--class`, `-o initial_window_width=64c`, shipped `kitty.conf` with `background_opacity 0`); foot stays available with `IDLEFX_TERMINAL=foot`. kitty idles around 85 MB, so its unit gets `MemoryMax=128M`; foot keeps 64M.
 
 ## Open questions

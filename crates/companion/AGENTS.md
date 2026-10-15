@@ -19,10 +19,10 @@ root `AGENTS.md`; the spec is `docs/2026-10-14-dog-companion-01-spec.md`.
 ## Window and resources
 
 - Default window: **64x16** cells (a 64x32-pixel canvas, about 580x290 screen
-  pixels with foot's default font). Try other sizes with
+  pixels with foot's default font; kitty's default font makes it about 580x320). Try other sizes with
   `idlefx-companion launch --window COLSxROWS`; the dog keeps its size and
   wanders the width it gets.
-- **CPU ceiling: 10% of one core**, for the whole window (foot and the dog):
+- **CPU ceiling: 10% of one core**, for the whole window (the terminal and the dog):
   `CPUQuota=10%` on the unit, and the core's CPU budget lowers the walking
   frame rate (60 → 30 → 20) before the quota would throttle it.
 - Process targets in the default window: under 1% asleep, under 3% idle,
@@ -82,13 +82,16 @@ idlefx-companion launch                  # or: launch --window 80x20
 ```
 
 `launch` runs `systemd-run --user --unit=idlefx-companion --collect
--p CPUQuota=10% -p MemoryMax=64M foot --config=<transparent foot.ini>
---app-id=idlefx-companion --window-size-chars=64x16 idlefx-companion`.
+-p CPUQuota=10% -p MemoryMax=128M kitty --config=<transparent kitty.conf>
+--class=idlefx-companion -o initial_window_width=64c
+-o initial_window_height=16c idlefx-companion`.
 A second launch while it runs does nothing; stop it with `q` in the window or
 `systemctl --user stop idlefx-companion`. `--dry-run` prints the command;
-`IDLEFX_TERMINAL` picks another terminal binary. The shipped `contrib/foot.ini`
-makes the default background fully transparent (`colors.alpha=0`), with no
-decorations and no padding.
+`IDLEFX_TERMINAL=foot` runs it in foot instead (with `--app-id` and
+`--window-size-chars`, and a 64 MB cap); any binary not named `kitty` gets
+foot's flags. The shipped `contrib/kitty.conf` (`background_opacity 0`) and
+`contrib/foot.ini` (`colors-dark.alpha=0`) make the default background fully
+transparent, with no decorations and no padding.
 
 - **Hyprland** (0.53+ rule syntax): add to `hyprland.conf`
 

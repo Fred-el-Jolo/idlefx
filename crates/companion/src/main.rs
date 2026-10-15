@@ -23,7 +23,7 @@ idlefx-companion — a small dog living in a terminal window
 usage:
   idlefx-companion [options]          run the dog in this terminal
   idlefx-companion launch [--window COLSxROWS] [--dry-run]
-                                      open its own floating foot window (64x16)
+                                      open its own floating kitty window (64x16)
   idlefx-companion poke <event>       send hello, thinking, success, failure or commit
   idlefx-companion snapshot --pose <pose>
                                       print one pose: stand walk sit lie sleep happy sad curious
