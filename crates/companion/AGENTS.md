@@ -45,6 +45,7 @@ root `AGENTS.md`; the spec is `docs/2026-10-14-dog-companion-01-spec.md`.
 `idlefx-companion poke <event>` sends one event to the running dog through
 `$XDG_RUNTIME_DIR/idlefx-companion.sock`. It exits 0 silently when no dog is
 running, so hooks never fail because of it. Unknown names are ignored.
+`idlefx-companion poke --list` (or `poke` alone) lists them:
 
 | Event | Reaction |
 |---|---|
@@ -74,6 +75,17 @@ Hook snippets (not installed for you):
   idlefx-companion poke commit
   ```
 
+## Managing the running dog
+
+| Command | What it does |
+|---|---|
+| `idlefx-companion status` | Whether the dog runs, as the launched window or in a terminal, with its pid; exits 3 when it does not |
+| `idlefx-companion stop` | Closes the launched window (or `q` in it); says so when nothing runs |
+| `idlefx-companion stats` | Every 2 s: the dog's CPU and memory, plus, for the launched window, the unit's CPU against its 10% quota and memory against its 128 MB cap; Ctrl-C to stop |
+| `idlefx-companion poke --list` | The events and the dog's reactions |
+
+The mise tasks `status`, `stop`, `stats` and `poke` run the same commands from the repo.
+
 ## Launch and desktop setup
 
 ```sh
@@ -85,8 +97,7 @@ idlefx-companion launch                  # or: launch --window 80x20
 -p CPUQuota=10% -p MemoryMax=128M kitty --config=<transparent kitty.conf>
 --class=idlefx-companion -o initial_window_width=64c
 -o initial_window_height=16c idlefx-companion`.
-A second launch while it runs does nothing; stop it with `q` in the window or
-`systemctl --user stop idlefx-companion`. `--dry-run` prints the command;
+A second launch while it runs does nothing. `--dry-run` prints the command;
 `IDLEFX_TERMINAL` points it at another kitty binary. The window is kitty
 only: kitty idles around 85 MB, hence the 128 MB cap. The shipped
 `contrib/kitty.conf` (`background_opacity 0`) makes the default background

@@ -107,6 +107,17 @@ impl Poke {
     pub fn parse(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|p| p.name() == name)
     }
+
+    /// What the dog does on this event.
+    pub fn reaction(self) -> &'static str {
+        match self {
+            Poke::Hello => "happy greeting: fast wag and a little hop",
+            Poke::Thinking => "sits, head tilted, ears up, until the next event or 60 s",
+            Poke::Success => "happy",
+            Poke::Failure => "sad for a few seconds: ears and tail down",
+            Poke::Commit => "happy, with a ! above its head",
+        }
+    }
 }
 
 /// Why the state changed.

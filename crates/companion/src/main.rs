@@ -4,6 +4,7 @@
 
 mod app;
 mod brain;
+mod control;
 mod dog;
 mod launch;
 mod socket;
@@ -25,6 +26,10 @@ usage:
   idlefx-companion launch [--window COLSxROWS] [--dry-run]
                                       open its own floating kitty window (64x16)
   idlefx-companion poke <event>       send hello, thinking, success, failure or commit
+  idlefx-companion poke --list        list the events and the dog's reactions
+  idlefx-companion status             is the dog running, and where
+  idlefx-companion stop               close the launched window
+  idlefx-companion stats              CPU and memory of the dog (and its window) every 2 s
   idlefx-companion snapshot --pose <pose>
                                       print one pose: stand walk sit lie sleep happy sad curious
   idlefx-companion simulate --start HH:MM --duration SECS [--seed N] [--trace FILE]
@@ -212,13 +217,21 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             Ok(())
         }
-        Some("poke") => {
-            let Some(name) = args.get(1) else {
-                return fail("poke needs an event: hello, thinking, success, failure or commit");
-            };
-            socket::poke(name);
-            Ok(())
-        }
+        Some("poke") => match args.get(1).map(String::as_str) {
+            None | Some("--list" | "-l") => {
+                for p in brain::Poke::ALL {
+                    println!("{:<9} {}", p.name(), p.reaction());
+                }
+                Ok(())
+            }
+            Some(name) => {
+                socket::poke(name);
+                Ok(())
+            }
+        },
+        Some("status") => return ExitCode::from(control::status() as u8),
+        Some("stop") => return ExitCode::from(control::stop() as u8),
+        Some("stats") => return ExitCode::from(control::stats() as u8),
         Some("launch") => {
             let window = arg(&args, "--window").unwrap_or(launch::DEFAULT_WINDOW);
             return ExitCode::from(launch::launch(window, flag(&args, "--dry-run")) as u8);
