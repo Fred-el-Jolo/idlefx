@@ -494,12 +494,15 @@ name = "idlefx-companion"
 version = "0.1.0"
 dependencies = [
  "idlefx-core",
+ "libc",
+ "ratatui",
 ]
 
 [[package]]
 name = "idlefx-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "ratatui",
 ]
 

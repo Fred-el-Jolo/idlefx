@@ -5,3 +5,5 @@ edition.workspace = true
 
 [dependencies]
 idlefx-core.workspace = true
+libc = "0.2"
+ratatui.workspace = true

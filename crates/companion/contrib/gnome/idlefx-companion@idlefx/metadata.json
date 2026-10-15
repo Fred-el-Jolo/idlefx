@@ -1,0 +1,6 @@
+{
+  "uuid": "idlefx-companion@idlefx",
+  "name": "idlefx companion",
+  "description": "Keeps the idlefx companion window (app id idlefx-companion) above other windows, on every workspace, at the bottom-right of the screen.",
+  "shell-version": ["46", "47", "48", "49"]
+}

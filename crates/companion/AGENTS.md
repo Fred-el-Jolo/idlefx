@@ -1,18 +1,118 @@
 # idlefx-companion
 
-Idle companions that live in a spare terminal pane all day. Shared rules
-(rendering, smoothness, idle CPU) are in the root `AGENTS.md`.
+A small procedural dog that lives all day in its own floating, transparent
+terminal window. Shared rules (rendering, smoothness, idle CPU) are in the
+root `AGENTS.md`; the spec is `docs/2026-10-14-dog-companion-01-spec.md`.
 
-## Idea
+## The dog
 
-- A sprite with a state machine (idle / sleep / react) and smooth,
-  spring-driven motion.
-- Reacts to its surroundings: time of day, git activity, CPU load, etc.
-- Could also live in a Claude Code pane or status line.
+- Drawn from parts (body, chest, head, snout, ears, tail, four legs) on a
+  light skeleton, about 30x20 pixels standing; a cell is 1 pixel wide and 2
+  tall. Critically damped springs move every part toward the current pose,
+  so poses blend; the walk cycle follows the ground covered (no foot sliding).
+- Poses: stand, walk, sit, lie, sleep, happy, sad, curious (plus think and a
+  stretch). Review one with `idlefx-companion snapshot --pose <pose>`.
+- Code: `src/dog.rs` (body, poses, drawing), `src/brain.rs` (behaviour),
+  `src/app.rs` (the live app on the core loop), `src/socket.rs` (events),
+  `src/launch.rs` (the window).
 
-## Specific rules
+## Window and resources
 
-- Mostly idle: the frame rate drops to ~2fps or sleeps when nothing moves.
-  CPU usage at rest must be negligible.
+- Default window: **64x16** cells (a 64x32-pixel canvas, about 580x290 screen
+  pixels with foot's default font). Try other sizes with
+  `idlefx-companion launch --window COLSxROWS`; the dog keeps its size and
+  wanders the width it gets.
+- **CPU ceiling: 10% of one core**, for the whole window (foot and the dog):
+  `CPUQuota=10%` on the unit, and the core's CPU budget lowers the walking
+  frame rate (60 → 30 → 20) before the quota would throttle it.
+- Process targets in the default window: under 1% asleep, under 3% idle,
+  under 6% walking; resident memory under 32 MB.
+- Frame rates: 60fps while walking or reacting, 4fps idle, 2fps asleep.
 
-Status: not started.
+## Behaviour
+
+- States: idle, wander, sit, lie, sleep, and the reactions happy, sad,
+  curious, thinking, stretch; walk when called. Calm states change after a
+  random time (`--seed` makes it repeatable).
+- Night is **22:00 to 07:00** local time: the dog settles down and sleeps; a
+  reaction wakes it and it goes back to sleep within a minute. The first
+  wake-up after 07:00 is a stretch.
+- Click the dog to pet it (happy, a heart rises); click elsewhere and it
+  walks there. `q`, `Esc` or Ctrl-C quit.
+
+## Events
+
+`idlefx-companion poke <event>` sends one event to the running dog through
+`$XDG_RUNTIME_DIR/idlefx-companion.sock`. It exits 0 silently when no dog is
+running, so hooks never fail because of it. Unknown names are ignored.
+
+| Event | Reaction |
+|---|---|
+| `hello` | happy greeting |
+| `thinking` | sits, head tilted, ears up, until the next event or 60 s |
+| `success` | happy |
+| `failure` | sad for a few seconds |
+| `commit` | happy, with a `!` |
+
+Hook snippets (not installed for you):
+
+- Claude Code, in `~/.claude/settings.json`:
+
+  ```json
+  {
+    "hooks": {
+      "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke thinking" }] }],
+      "Stop": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke success" }] }]
+    }
+  }
+  ```
+
+- git, in a repo's `.git/hooks/post-commit` (executable):
+
+  ```sh
+  #!/bin/sh
+  idlefx-companion poke commit
+  ```
+
+## Launch and desktop setup
+
+```sh
+cargo install --path crates/companion   # puts idlefx-companion in ~/.cargo/bin
+idlefx-companion launch                  # or: launch --window 80x20
+```
+
+`launch` runs `systemd-run --user --unit=idlefx-companion --collect
+-p CPUQuota=10% -p MemoryMax=64M foot --config=<transparent foot.ini>
+--app-id=idlefx-companion --window-size-chars=64x16 idlefx-companion`.
+A second launch while it runs does nothing; stop it with `q` in the window or
+`systemctl --user stop idlefx-companion`. `--dry-run` prints the command;
+`IDLEFX_TERMINAL` picks another terminal binary. The shipped `contrib/foot.ini`
+makes the default background fully transparent (`colors.alpha=0`), with no
+decorations and no padding.
+
+- **Hyprland** (0.53+ rule syntax): add to `hyprland.conf`
+
+  ```
+  source = /path/to/idlefx/crates/companion/contrib/hyprland/idlefx-companion.conf
+  ```
+
+  The rule floats the window, pins it on every workspace, removes border,
+  shadow, blur and rounding, skips the initial focus and puts it at the
+  bottom-right.
+- **GNOME**: install the shipped Shell extension, then log out and back in
+  (Wayland):
+
+  ```sh
+  cp -r crates/companion/contrib/gnome/idlefx-companion@idlefx ~/.local/share/gnome-shell/extensions/
+  gnome-extensions enable idlefx-companion@idlefx
+  ```
+
+  It keeps the window above other windows, on all workspaces, at the
+  bottom-right.
+
+## Test options
+
+`--trace FILE` (one line per state change: time, from, to, cause, and
+`latency_ms` for input), `--stats`, `--duration SECS`, `--state STATE` (start
+in a state and hold it until an input), `--clock HH:MM`, `--at X`, `--seed N`,
+and `simulate --start HH:MM --duration SECS` (headless, fake clock).

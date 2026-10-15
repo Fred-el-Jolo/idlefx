@@ -18,10 +18,24 @@ companions, and a spaceship game with realistic flight (Star Citizen-like
 
 One Cargo workspace, one repo:
 
-- `crates/core` — `idlefx-core`, the shared library: terminal setup and
-  restore, half-block framebuffer, frame loop, input. Its API is not designed
-  yet. The plasma prototype is its example: `cargo run --release --example plasma`.
-- `crates/companion` — `idlefx-companion`, the idle companions (binary).
+- `crates/core` — `idlefx-core`, the shared library, in three pieces:
+  - **session** (`Session`): raw mode, alternate screen, hidden cursor,
+    optional SGR mouse and Kitty keyboard protocol; restored on exit and from
+    the panic hook (before the panic message); every frame wrapped in
+    synchronized output.
+  - **canvas** (`Canvas`): a half-block pixel canvas, 1 pixel wide and 2 tall
+    per cell, where a pixel is a color or transparent (drawn with the default
+    background, so a translucent terminal shows the desktop). Hard-edged
+    ellipse, capsule, rectangle and pixel primitives.
+  - **frame loop** (`Runner`, `App`): a fixed 1/120 s simulation step with
+    interpolation, input on its own thread, a `Waker` for events from other
+    threads, and frame rates by `Activity`: `Active` (up to 60fps), `Idle(n)`
+    (n ≤ 6 fps) or `Asleep` (no frames). An optional **CPU budget** measures
+    CPU use (the systemd `.service` cgroup when the app runs in one, else
+    `/proc/self/stat`) and steps the active rate 60 → 30 → 20 to stay under it.
+  Examples: `plasma` (`cargo run --release --example plasma`) and `testapp`
+  (drives the loop for the tests).
+- `crates/companion` — `idlefx-companion`, the dog companion (binary).
 - `crates/ship` — `idlefx-ship`, the spaceship game (binary).
 
 Each sub-project has its own `AGENTS.md` for its scope and rules; this file
@@ -70,4 +84,8 @@ A ~150-line prototype: half-block framebuffer → ratatui buffer → diffed,
 synchronized output, rendering a plasma effect at 60fps. Smoothness judged
 fine in the target terminals; it now lives in `crates/core/examples/plasma.rs`.
 
-Next: design the core API (to brainstorm before any spec).
+## Second milestone: the dog companion
+
+The core's first pieces and a procedural dog in its own floating window:
+spec `docs/2026-10-14-dog-companion-01-spec.md`, details in
+`crates/companion/AGENTS.md`.
