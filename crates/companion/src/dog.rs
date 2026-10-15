@@ -123,12 +123,14 @@ fn targets(pose: Pose) -> Targets {
             wag_freq: 1.6,
             ..STAND
         },
+        // Upright on its haunches: the rump rests on the ground, the hind
+        // paws tucked forward under it, the tail lying on the floor.
         Pose::Sit => Targets {
-            body_h: 8.5,
-            tilt: 0.45,
-            head_u: 8.5,
-            head_v: 17.0,
-            tail: -0.3,
+            body_h: 7.0,
+            tilt: 0.75,
+            head_u: 7.2,
+            head_v: 16.8,
+            tail: -0.12,
             wag_amp: 0.05,
             fold_rear: 1.0,
             ..STAND
@@ -535,7 +537,7 @@ impl Geometry {
             let hip = body_pt(hip_local[i].0, hip_local[i].1);
             let front = i < 2;
             let fold = if front { s.fold_front } else { s.fold_rear };
-            let fold_reach = if front { 4.5 } else { 2.5 };
+            let fold_reach = if front { 4.5 } else { 4.0 };
             let p = (s.phase + offsets[i]).fract();
             let (walk_u, walk_lift) = if p < 0.5 {
                 (STRIDE * (0.25 - p), 0.0)
@@ -549,7 +551,7 @@ impl Geometry {
             feet[i] = world_foot(foot_u, foot_v);
         }
         let haunch = (s.fold_rear > 0.3).then(|| {
-            let h = body_pt(-5.0, -0.8);
+            let h = body_pt(-4.0, -1.5);
             let (x, y) = world(h.0, h.1);
             (x, y, s.fold_rear)
         });
@@ -607,7 +609,7 @@ impl Geometry {
         }
         canvas.ellipse(self.body.0, self.body.1, self.body_r.0, self.body_r.1, self.body_angle, COAT);
         if let Some((x, y, k)) = self.haunch {
-            canvas.ellipse(x, y, 3.2 * sq, 2.4 + 0.4 * k, 0.0, COAT);
+            canvas.ellipse(x, y, 3.6 * sq, 2.4 + 0.6 * k, 0.0, COAT);
         }
         canvas.ellipse(self.chest.0, self.chest.1, 3.0 * sq, 3.0, 0.0, CREAM);
         for i in [0, 2] {
