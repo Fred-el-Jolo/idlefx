@@ -6,6 +6,7 @@ mod app;
 mod brain;
 mod control;
 mod dog;
+mod hooks;
 mod launch;
 mod socket;
 
@@ -25,14 +26,22 @@ usage:
   idlefx-companion [options]          run the dog in this terminal
   idlefx-companion launch [--window COLSxROWS] [--dry-run]
                                       open its own floating kitty window (64x16)
-  idlefx-companion poke <event>       send hello, thinking, success, failure or commit
+  idlefx-companion poke <event>       send an event to the running dog (hooks call this)
   idlefx-companion poke --list        list the events and the dog's reactions
+  idlefx-companion hooks install [claude] [git] [hypridle] [gnome] [--template]
+                                      set up the hooks that poke the dog (no target: all
+                                      that apply here; --template: git hooks for new repos too)
+  idlefx-companion hooks status [targets]     which hooks are installed
+  idlefx-companion hooks uninstall [targets] [--template]
+                                      remove exactly what install added
   idlefx-companion status             is the dog running, and where
   idlefx-companion stop               close the launched window
   idlefx-companion stats              CPU and memory of the dog (and its window) every 2 s
   idlefx-companion snapshot --pose <pose>
                                       print one pose: stand walk sit lie sleep happy sad curious
+                                      think stretch dig alert
   idlefx-companion simulate --start HH:MM --duration SECS [--seed N] [--trace FILE]
+                   [--break-every MIN]
                                       run the behaviour headless on a fake clock
 
 options:
@@ -40,10 +49,13 @@ options:
   --stats          print frame, CPU and memory stats on exit
   --duration SECS  quit after this long
   --state STATE    start in a state and hold it until an input
-                   (idle wander walk sit lie sleep happy sad curious thinking stretch)
+                   (idle wander walk sit lie sleep happy sad curious thinking stretch
+                   working alert run)
   --clock HH:MM    pretend the local time is this at start
   --at X           start at this x, in pixels
   --seed N         seed the behaviour's randomness
+  --break-every MIN  remind you to take a break after MIN minutes of work, then
+                   every 5 min until you leave (default 25; 0 turns it off)
 
 keys: q, Esc or Ctrl-C quit. Click the dog to pet it, elsewhere to call it.";
 
@@ -102,6 +114,19 @@ fn secs(args: &[String], name: &str) -> Result<Option<Duration>, String> {
         .transpose()
 }
 
+/// `--break-every MIN`, in seconds.
+fn break_every(args: &[String]) -> Result<f64, String> {
+    match arg(args, "--break-every") {
+        Some(s) => s
+            .parse::<f64>()
+            .ok()
+            .filter(|v| *v >= 0.0)
+            .map(|v| v * 60.0)
+            .ok_or(format!("bad break interval (minutes): {s}")),
+        None => Ok(brain::BREAK_EVERY),
+    }
+}
+
 fn max_rss_kb() -> i64 {
     // SAFETY: getrusage writes only into `usage`, which we own.
     let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
@@ -128,7 +153,8 @@ fn run(args: &[String]) -> Result<(), String> {
         Some(p) => Some(File::create(p).map_err(|e| format!("cannot write {p}: {e}"))?),
         None => None,
     };
-    let model = Companion::new(width, x, tod, seed(args)?, start);
+    let mut model = Companion::new(width, x, tod, seed(args)?, start);
+    model.set_break_every(break_every(args)?);
     let mut app = app::CompanionApp::new(model, trace);
 
     let runner = Runner::new();
@@ -188,6 +214,7 @@ fn simulate(args: &[String]) -> Result<(), String> {
     let duration = secs(args, "--duration")?.ok_or("simulate needs --duration SECS")?;
     let width = 64.0;
     let mut model = Companion::new(width, width / 2.0, start, seed(args)?, None);
+    model.set_break_every(break_every(args)?);
     let mut out: Box<dyn std::io::Write> = match arg(args, "--trace") {
         Some(p) => Box::new(std::io::BufWriter::new(
             File::create(p).map_err(|e| format!("cannot write {p}: {e}"))?,
@@ -195,7 +222,7 @@ fn simulate(args: &[String]) -> Result<(), String> {
         None => Box::new(std::io::stdout()),
     };
     let dt = 1.0 / 120.0;
-    let steps = (duration.as_secs_f64() / f64::from(dt)) as u64;
+    let steps = (duration.as_secs_f64() / f64::from(dt)).round() as u64;
     let mut line = String::new();
     for i in 0..=steps {
         if i > 0 {
@@ -229,6 +256,7 @@ fn main() -> ExitCode {
                 Ok(())
             }
         },
+        Some("hooks") => return ExitCode::from(hooks::main(&args[1..]) as u8),
         Some("status") => return ExitCode::from(control::status() as u8),
         Some("stop") => return ExitCode::from(control::stop() as u8),
         Some("stats") => return ExitCode::from(control::stats() as u8),

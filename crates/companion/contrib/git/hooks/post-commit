@@ -1,0 +1,7 @@
+#!/bin/sh
+# >>> idlefx-companion >>>
+# The dog cheers each commit (`idlefx-companion hooks uninstall git` removes this block).
+idlefx_status=$?
+command -v idlefx-companion >/dev/null 2>&1 && idlefx-companion poke commit >/dev/null 2>&1
+(exit $idlefx_status)
+# <<< idlefx-companion <<<

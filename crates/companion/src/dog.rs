@@ -20,11 +20,17 @@ const INK: Rgb = Rgb(30, 22, 20);
 const HEART: Rgb = Rgb(232, 72, 96);
 const ZZZ: Rgb = Rgb(200, 215, 240);
 const BANG: Rgb = Rgb(250, 210, 80);
+const CUP: Rgb = Rgb(236, 240, 246);
+const STEAM: Rgb = Rgb(190, 200, 215);
 
 /// Distance covered by one full walk cycle.
 const STRIDE: f32 = 7.0;
 /// Walking speed, pixels per second.
 pub const WALK_SPEED: f32 = 18.0;
+/// Running speed (after a push), pixels per second.
+pub const RUN_SPEED: f32 = 34.0;
+/// Paw strokes per second while digging.
+const DIG_RATE: f32 = 2.5;
 /// Half the dog's length: how close its center may come to an edge.
 pub const HALF_LENGTH: f32 = 16.0;
 
@@ -42,6 +48,10 @@ pub enum Pose {
     Think,
     /// Play bow: front down, rear up.
     Stretch,
+    /// Head low, front paws scraping in turn.
+    Dig,
+    /// Standing tall, ears and tail up.
+    Alert,
 }
 
 /// The eight poses reviewed with the snapshot option.
@@ -70,6 +80,8 @@ impl Pose {
             "curious" => Pose::Curious,
             "think" => Pose::Think,
             "stretch" => Pose::Stretch,
+            "dig" => Pose::Dig,
+            "alert" => Pose::Alert,
             _ => return None,
         })
     }
@@ -92,6 +104,7 @@ struct Targets {
     fold_rear: f32,
     hop: f32,
     eyes: f32,
+    dig: f32,
 }
 
 const STAND: Targets = Targets {
@@ -109,6 +122,7 @@ const STAND: Targets = Targets {
     fold_rear: 0.0,
     hop: 0.0,
     eyes: 1.0,
+    dig: 0.0,
 };
 
 fn targets(pose: Pose) -> Targets {
@@ -204,6 +218,31 @@ fn targets(pose: Pose) -> Targets {
             fold_front: 0.7,
             ..STAND
         },
+        Pose::Dig => Targets {
+            body_h: 8.6,
+            tilt: -0.28,
+            head_u: 12.0,
+            head_v: 8.0,
+            head_tilt: -0.3,
+            ear: 0.55,
+            tail: 1.0,
+            wag_amp: 0.3,
+            wag_freq: 2.2,
+            fold_front: 0.25,
+            dig: 1.0,
+            ..STAND
+        },
+        Pose::Alert => Targets {
+            body_h: 10.6,
+            tilt: 0.08,
+            head_u: 10.0,
+            head_v: 17.6,
+            ear: 1.15,
+            tail: 1.15,
+            wag_amp: 0.05,
+            wag_freq: 1.0,
+            ..STAND
+        },
     }
 }
 
@@ -232,6 +271,13 @@ pub struct State {
     hop_phase: f32,
     eyes: f32,
     breath: f32,
+    dig_w: f32,
+    dig_phase: f32,
+}
+
+/// Blend two phases in `[0, TAU)`, without sweeping back across the wrap.
+fn lerp_phase(a: f32, b: f32, t: f32) -> f32 {
+    if (b - a).abs() < PI { a + (b - a) * t } else { b }
 }
 
 impl State {
@@ -261,6 +307,8 @@ impl State {
             hop_phase: m(a.hop_phase, b.hop_phase),
             eyes: m(a.eyes, b.eyes),
             breath: m(a.breath, b.breath),
+            dig_w: m(a.dig_w, b.dig_w),
+            dig_phase: lerp_phase(a.dig_phase, b.dig_phase, t),
         }
     }
 }
@@ -285,6 +333,7 @@ struct Velocity {
     fold_rear: f32,
     hop: f32,
     eyes: f32,
+    dig_w: f32,
 }
 
 /// Critically damped spring step (semi-implicit Euler).
@@ -301,6 +350,8 @@ pub struct Dog {
     vel: Velocity,
     pose: Pose,
     goal: Option<f32>,
+    /// Top speed toward the goal: walking or running.
+    max_speed: f32,
     face_goal: f32,
     blink: f32,
     time: f32,
@@ -322,6 +373,7 @@ impl Dog {
             vel: Velocity::default(),
             pose,
             goal: None,
+            max_speed: WALK_SPEED,
             face_goal: 1.0,
             blink: 0.0,
             time: 0.0,
@@ -348,6 +400,7 @@ impl Dog {
         s.fold_rear = t.fold_rear;
         s.hop = t.hop;
         s.eyes = t.eyes;
+        s.dig_w = t.dig;
         self.vel = Velocity::default();
         self.prev = self.cur;
     }
@@ -363,6 +416,13 @@ impl Dog {
     /// Walk to `x`, easing in and out.
     pub fn walk_to(&mut self, x: f32) {
         self.goal = Some(x);
+        self.max_speed = WALK_SPEED;
+    }
+
+    /// Run to `x`: like walking, faster.
+    pub fn run_to(&mut self, x: f32) {
+        self.goal = Some(x);
+        self.max_speed = RUN_SPEED;
     }
 
     pub fn stop(&mut self) {
@@ -385,12 +445,13 @@ impl Dog {
         self.walking()
             || [
                 v.face, v.body_h, v.tilt, v.head_u, v.head_v, v.ear, v.tail, v.fold_front,
-                v.fold_rear, v.hop, v.eyes,
+                v.fold_rear, v.hop, v.eyes, v.dig_w,
             ]
             .into_iter()
             .any(fast)
             || self.cur.hop > 0.1
             || self.cur.wag_amp > 0.3
+            || self.cur.dig_w > 0.05
     }
 
     /// Advance by `dt` seconds. Returns true on the step the dog arrives at
@@ -414,7 +475,7 @@ impl Dog {
                     arrived = true;
                     0.0
                 } else {
-                    (d * 2.5).clamp(-WALK_SPEED, WALK_SPEED)
+                    (d * 2.5).clamp(-self.max_speed, self.max_speed)
                 }
             }
             None => 0.0,
@@ -442,6 +503,8 @@ impl Dog {
         spring(&mut s.fold_rear, &mut v.fold_rear, t.fold_rear, OMEGA, dt);
         spring(&mut s.hop, &mut v.hop, t.hop, 5.0, dt);
         spring(&mut s.eyes, &mut v.eyes, t.eyes, 6.0, dt);
+        spring(&mut s.dig_w, &mut v.dig_w, t.dig, 5.0, dt);
+        s.dig_phase = (s.dig_phase + TAU * DIG_RATE * dt) % TAU;
         s.wag_phase = (s.wag_phase + TAU * s.wag_freq * dt) % TAU;
         s.hop_phase = (s.hop_phase + TAU * 1.5 * dt) % TAU;
         s.breath = (self.time * TAU / 4.0).sin();
@@ -545,8 +608,16 @@ impl Geometry {
                 (STRIDE * (p - 0.75), 1.6 * ((p - 0.5) * TAU).sin())
             };
             let w = s.walk_w * (1.0 - fold);
-            let foot_u = hip.0 + 0.2 + (fold_reach - 0.2) * fold + w * walk_u;
-            let foot_v = 0.9 * fold + w * walk_lift;
+            // Digging: each front paw reaches forward, lifted, then scrapes
+            // back along the ground; the two paws half a stroke apart.
+            let (dig_u, dig_lift) = if front {
+                let ph = s.dig_phase + if i == 1 { PI } else { 0.0 };
+                (s.dig_w * 2.2 * ph.cos(), s.dig_w * 1.4 * ph.sin().max(0.0))
+            } else {
+                (0.0, 0.0)
+            };
+            let foot_u = hip.0 + 0.2 + (fold_reach - 0.2) * fold + w * walk_u + dig_u;
+            let foot_v = 0.9 * fold + w * walk_lift + dig_lift;
             hips[i] = world(hip.0, hip.1);
             feet[i] = world_foot(foot_u, foot_v);
         }
@@ -652,6 +723,10 @@ pub enum Mark {
     Zzz(f32),
     /// An exclamation mark.
     Bang,
+    /// A question mark.
+    Question,
+    /// A steaming cup (the break reminder), `t` in seconds.
+    Cup(f32),
 }
 
 pub fn draw_mark(canvas: &mut Canvas, geo: &Geometry, mark: Mark) {
@@ -672,6 +747,23 @@ pub fn draw_mark(canvas: &mut Canvas, geo: &Geometry, mark: Mark) {
             ZZZ,
         ),
         Mark::Bang => glyph(canvas, &["#", "#", "#", ".", "#"], hx + 1.0, hy - 5.0, BANG),
+        Mark::Question => glyph(
+            canvas,
+            &[".##.", "#..#", "..#.", ".#..", "....", ".#.."],
+            hx + 1.0,
+            hy - 7.0,
+            BANG,
+        ),
+        Mark::Cup(t) => {
+            let (x, y) = (hx - 2.0, hy - 5.0);
+            glyph(canvas, &["####.", "#####", "####.", ".##.."], x, y, CUP);
+            // Two wisps of steam, drifting up in turn.
+            for k in 0..2 {
+                let p = (t * 0.8 + k as f32 * 0.5).fract();
+                let wobble = (p * TAU).sin().round();
+                canvas.pixel(x + 1.0 + 2.0 * k as f32 + wobble, y - 5.0 - 3.0 * p, STEAM);
+            }
+        }
     }
 }
 
@@ -780,6 +872,76 @@ mod tests {
                 assert!(worst <= 2.0, "{a:?} -> {b:?}: a part moved {worst:.2} px in one frame");
             }
         }
+    }
+
+    #[test]
+    fn new_poses_fit_canvas() {
+        for pose in [Pose::Dig, Pose::Alert] {
+            let mut dog = Dog::new(32.0, pose);
+            for _ in 0..240 {
+                dog.update(DT);
+                for (x, y) in Geometry::of(&dog.cur, H as f32).key_points() {
+                    assert!(
+                        (1.0..W as f32 - 1.0).contains(&x) && (1.0..H as f32 + 0.1).contains(&y),
+                        "{pose:?}: point ({x}, {y}) leaves the canvas"
+                    );
+                }
+            }
+            let (x0, y0, x1, _) = bounds_of(&dog);
+            assert!(x0 > 0 && x1 < W && y0 > 0, "{pose:?} touches the canvas edge");
+        }
+    }
+
+    #[test]
+    fn new_poses_blend() {
+        let all = [
+            Pose::Stand,
+            Pose::Sit,
+            Pose::Lie,
+            Pose::Sleep,
+            Pose::Happy,
+            Pose::Sad,
+            Pose::Curious,
+            Pose::Think,
+            Pose::Stretch,
+            Pose::Dig,
+            Pose::Alert,
+        ];
+        for a in all {
+            for b in all {
+                if ![a, b].iter().any(|p| matches!(p, Pose::Dig | Pose::Alert)) {
+                    continue;
+                }
+                let mut dog = Dog::new(32.0, a);
+                max_step(&mut dog, 1.0);
+                dog.set_pose(b);
+                let worst = max_step(&mut dog, 3.0);
+                assert!(worst <= 2.0, "{a:?} -> {b:?}: a part moved {worst:.2} px in one frame");
+            }
+        }
+    }
+
+    #[test]
+    fn dig_paws_alternate() {
+        let mut dog = Dog::new(32.0, Pose::Dig);
+        for _ in 0..120 {
+            dog.update(DT);
+        }
+        let (mut near, mut far) = (Vec::new(), Vec::new());
+        for _ in 0..120 {
+            dog.update(DT);
+            let geo = Geometry::of(&dog.cur, H as f32);
+            near.push(geo.feet[0].0 - geo.hips[0].0);
+            far.push(geo.feet[1].0 - geo.hips[1].0);
+        }
+        let span = |v: &[f32]| v.iter().cloned().fold(f32::MIN, f32::max) - v.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(span(&near) > 1.5 && span(&far) > 1.5, "paws barely move");
+        let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+        let (mn, mf) = (mean(&near), mean(&far));
+        let cov: f32 = near.iter().zip(&far).map(|(a, b)| (a - mn) * (b - mf)).sum();
+        let var = |v: &[f32], m: f32| v.iter().map(|a| (a - m).powi(2)).sum::<f32>().sqrt();
+        let corr = cov / (var(&near, mn) * var(&far, mf));
+        assert!(corr < -0.5, "paws move together (correlation {corr:.2})");
     }
 
     #[test]

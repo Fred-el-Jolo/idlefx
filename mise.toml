@@ -43,7 +43,7 @@ run = "cargo run --release -q -p idlefx-companion -- status"
 description = "Print every pose of the dog inline"
 run = """
 cargo build --release -q -p idlefx-companion
-for pose in stand walk sit lie sleep happy sad curious; do
+for pose in stand walk sit lie sleep happy sad curious dig alert; do
   echo "$pose"
   ./target/release/idlefx-companion snapshot --pose "$pose"
 done

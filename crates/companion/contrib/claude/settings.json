@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke hello 2>/dev/null || true" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke thinking 2>/dev/null || true" }] }],
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke working 2>/dev/null || true" }] }],
+    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "idlefx-companion poke alert 2>/dev/null || true" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke success 2>/dev/null || true" }] }],
+    "StopFailure": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke failure 2>/dev/null || true" }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke yawn 2>/dev/null || true" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "idlefx-companion poke bye 2>/dev/null || true" }] }]
+  }
+}

@@ -1,6 +1,11 @@
 {
   "uuid": "idlefx-companion@idlefx",
   "name": "idlefx companion",
-  "description": "Keeps the idlefx companion window (app id idlefx-companion) above other windows, on every workspace, at the bottom-right of the screen.",
-  "shell-version": ["46", "47", "48", "49"]
+  "description": "Keeps the idlefx companion window (app id idlefx-companion) above other windows, on every workspace, at the bottom-right of the screen, and tells the dog when you lock the screen or go idle, and when you come back.",
+  "shell-version": [
+    "46",
+    "47",
+    "48",
+    "49"
+  ]
 }

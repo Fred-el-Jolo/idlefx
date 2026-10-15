@@ -7,3 +7,4 @@ edition.workspace = true
 idlefx-core.workspace = true
 libc = "0.2"
 ratatui.workspace = true
+serde_json = { version = "1", features = ["preserve_order"] }

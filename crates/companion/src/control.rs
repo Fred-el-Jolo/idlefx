@@ -13,8 +13,8 @@ use crate::launch::UNIT;
 /// The kernel keeps 15 characters of a process name.
 const COMM: &str = "idlefx-companio";
 /// Subcommands that are not the dog itself.
-const TOOLS: [&str; 9] = [
-    "launch", "poke", "snapshot", "simulate", "status", "stop", "stats", "help", "--help",
+const TOOLS: [&str; 10] = [
+    "launch", "poke", "hooks", "snapshot", "simulate", "status", "stop", "stats", "help", "--help",
 ];
 const INTERVAL: Duration = Duration::from_secs(2);
 
@@ -64,6 +64,11 @@ fn find_dog(cgroup: Option<&Path>) -> Option<u32> {
         .into_iter()
         .chain(anywhere)
         .find(|&pid| pid != me && is_dog(pid))
+}
+
+/// Whether the dog runs, in its window or in a terminal.
+pub fn running() -> bool {
+    find_dog(unit_cgroup().as_deref()).is_some()
 }
 
 /// `status`: exit 0 when the dog runs, 3 when it does not (like systemctl).
