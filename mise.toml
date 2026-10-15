@@ -1,2 +1,58 @@
 [tools]
 rust = "1.99.0"
+
+# Tasks that drive the terminal (raw mode, keys) need `raw = true`: otherwise
+# mise runs them outside the terminal's foreground group and they freeze on
+# their first read.
+
+[tasks.plasma]
+description = "Run the plasma example (q quits, space pauses, f shows fps)"
+run = "cargo run --release --example plasma --"
+raw = true
+
+[tasks.dog]
+description = "Run the dog companion in this terminal (q quits)"
+run = "cargo run --release -p idlefx-companion --"
+raw = true
+
+[tasks.check]
+description = "Clippy with warnings as errors, then all tests"
+run = [
+  "cargo clippy --workspace --all-targets -- -D warnings",
+  "cargo test --workspace",
+]
+
+[tasks.install]
+description = "Install idlefx-companion into ~/.cargo/bin (needed by launch and the hooks)"
+run = "cargo install --path crates/companion"
+
+[tasks.launch]
+description = "Install, then open the dog in its own floating window"
+depends = ["install"]
+run = "idlefx-companion launch"
+
+[tasks.stop]
+description = "Close the dog's floating window"
+run = "systemctl --user stop idlefx-companion 2>/dev/null || echo 'idlefx-companion is not running'"
+
+[tasks.poses]
+description = "Print every pose of the dog inline"
+run = """
+cargo build --release -q -p idlefx-companion
+for pose in stand walk sit lie sleep happy sad curious; do
+  echo "$pose"
+  ./target/release/idlefx-companion snapshot --pose "$pose"
+done
+"""
+
+[tasks.poke]
+description = "Send an event to the running dog: hello, thinking, success, failure, commit"
+run = "cargo run --release -q -p idlefx-companion -- poke"
+
+[tasks.bench]
+description = "Frame rate and CPU: 300 plasma frames, then 10 s of the walking dog"
+raw = true
+run = [
+  "cargo run --release -q --example plasma -- --frames 300",
+  "cargo run --release -q -p idlefx-companion -- --state walk --duration 10 --stats",
+]
