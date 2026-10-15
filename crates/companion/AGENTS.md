@@ -18,8 +18,8 @@ root `AGENTS.md`; the spec is `docs/2026-10-14-dog-companion-01-spec.md`.
 
 ## Window and resources
 
-- Default window: **64x16** cells (a 64x32-pixel canvas, about 580x290 screen
-  pixels with foot's default font; kitty's default font makes it about 580x320). Try other sizes with
+- Default window: **64x16** cells (a 64x32-pixel canvas, about 580x320 screen
+  pixels with kitty's default font). Try other sizes with
   `idlefx-companion launch --window COLSxROWS`; the dog keeps its size and
   wanders the width it gets.
 - **CPU ceiling: 10% of one core**, for the whole window (the terminal and the dog):
@@ -87,11 +87,11 @@ idlefx-companion launch                  # or: launch --window 80x20
 -o initial_window_height=16c idlefx-companion`.
 A second launch while it runs does nothing; stop it with `q` in the window or
 `systemctl --user stop idlefx-companion`. `--dry-run` prints the command;
-`IDLEFX_TERMINAL=foot` runs it in foot instead (with `--app-id` and
-`--window-size-chars`, and a 64 MB cap); any binary not named `kitty` gets
-foot's flags. The shipped `contrib/kitty.conf` (`background_opacity 0`) and
-`contrib/foot.ini` (`colors-dark.alpha=0`) make the default background fully
-transparent, with no decorations and no padding.
+`IDLEFX_TERMINAL` points it at another kitty binary. The window is kitty
+only: kitty idles around 85 MB, hence the 128 MB cap. The shipped
+`contrib/kitty.conf` (`background_opacity 0`) makes the default background
+fully transparent, with no decorations and no padding; passed with
+`--config`, it replaces your own kitty.conf for this window only.
 
 - **Hyprland** (0.53+ rule syntax): add to `hyprland.conf`
 
