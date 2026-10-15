@@ -1,5 +1,5 @@
 ---
-status: "acked 2026-10-15 #cc75c4ba"
+status: "acked 2026-10-15 #d69f3bf0"
 effort: E3
 ---
 
@@ -11,7 +11,7 @@ idlefx has a workspace but no shared core and no content: `idlefx-core` is an em
 
 ## Goal
 
-`idlefx-companion` shows a procedurally animated dog in a small floating window with a transparent background, on Hyprland and on GNOME. It walks, sits, lies down and sleeps on its own, follows the time of day, reacts to a mouse click, and reacts to events sent with `idlefx-companion poke <event>`. It renders at up to 60fps only while something moves fast, never uses more than 10% of a core, and uses well under 1% while it sleeps. It runs on reusable `idlefx-core` pieces: terminal session, transparent half-block canvas, frame loop with a CPU budget.
+`idlefx-companion` shows a procedurally animated dog in a small floating kitty window with a transparent background, on Hyprland and on GNOME. It walks, sits, lies down and sleeps on its own, follows the time of day, reacts to a mouse click, and reacts to events sent with `idlefx-companion poke <event>`. It renders at up to 60fps only while something moves fast, never uses more than 10% of a core, and uses well under 1% while it sleeps. It runs on reusable `idlefx-core` pieces: terminal session, transparent half-block canvas, frame loop with a CPU budget.
 Said:
 - "companion: a creature (dog, cute alien/animal...)"
 - "lives in a standalone, isolated (systemd-run ?) process in a dedicated floating terminal"
@@ -22,10 +22,13 @@ Said:
 - desktop: "Both equally" (Hyprland and GNOME)
 - "only keep std size, i will better understand when i will see it. Remove the extra sizes."
 - "Try to keep CPU under 10% under all circunstances."
+- "I want kitty, remove foot mentions"
 Assumed:
-- one terminal cell is 1 pixel wide and 2 pixels tall; the dog is about 30x20 pixels (about 270x180 screen pixels with foot's default font)
-- the default window is 64x16 cells (a 64x32-pixel canvas, about 580x290 screen pixels with foot's default font); `launch --window COLSxROWS` tries other sizes; the dog keeps its size and wanders the width of whatever window it gets
-- "under 10%" means 10% of one core, for the dog's whole window (foot and the companion together) when launched with `launch`, and for the companion process alone otherwise; when the budget is tight, a lower frame rate while moving is preferred over stutter
+- one terminal cell is 1 pixel wide and 2 pixels tall; the dog is about 30x20 pixels (about 270x200 screen pixels with kitty's default font)
+- the default window is 64x16 cells (a 64x32-pixel canvas, about 580x320 screen pixels with kitty's default font); `launch --window COLSxROWS` tries other sizes; the dog keeps its size and wanders the width of whatever window it gets
+- "under 10%" means 10% of one core, for the dog's whole window (kitty and the companion together) when launched with `launch`, and for the companion process alone otherwise; when the budget is tight, a lower frame rate while moving is preferred over stutter
+- the dog's window is kitty only: `launch` has no other terminal; `IDLEFX_TERMINAL` only points it at another kitty binary (or a stand-in for tests)
+- the root AGENTS.md keeps foot in the project's list of target terminals: it is about the whole repo, not the companion's window
 - v1 event names: `hello`, `thinking`, `success`, `failure`, `commit`; any other name is ignored
 - night is 22:00 to 07:00 local time: the dog sleeps unless woken, and goes back to sleep after a reaction
 - `q` and Ctrl-C quit; there is no other keyboard control
@@ -33,7 +36,7 @@ Assumed:
 - Claude Code and git hooks are documented as snippets, not installed in the user's settings
 - the ship brainstorm answers are recorded in `crates/ship/AGENTS.md` as part of this work, so they are not lost
 - Hyprland's rule syntax changed across versions: the rules file is written for the Hyprland you run, and I'll ask for `hyprctl version` before writing it
-- this machine (over SSH) has neither Hyprland, GNOME nor foot, so the window checks of S8, foot's share of the CPU, and the look of S4 are confirmed by you on your desktop; `launch` is tested here with a stand-in for foot
+- this machine (over SSH) has neither Hyprland, GNOME nor a Wayland session, so the window checks of S8, kitty's share of the CPU, and the look of S4 are confirmed by you on your desktop; `launch` is tested here with a stand-in for kitty
 
 ## Out of scope
 
@@ -41,16 +44,16 @@ The ship game and the idle game (beyond recording the ship brainstorm), other cr
 
 ## Constraints
 
-- CPU never above 10% of one core, in any state. Enforced twice: the launched unit has `CPUQuota=10%` (foot and the companion together), and the core's frame loop keeps the app under its CPU budget by lowering the frame rate before the quota throttles it.
-- CPU of the companion process in the default 64x16 window, one core, Linux `/proc` accounting, averaged over 10 s: under 1% asleep, under 3% idle awake (breathing, looking around), under 6% walking. These stay below 10% so foot's share of the unit's quota has room.
-- Resident memory under 32 MB.
+- CPU never above 10% of one core, in any state. Enforced twice: the launched unit has `CPUQuota=10%` (kitty and the companion together), and the core's frame loop keeps the app under its CPU budget by lowering the frame rate before the quota throttles it.
+- CPU of the companion process in the default 64x16 window, one core, Linux `/proc` accounting, averaged over 10 s: under 1% asleep, under 3% idle awake (breathing, looking around), under 6% walking. These stay below 10% so kitty's share of the unit's quota has room.
+- Resident memory of the companion process under 32 MB; the launched unit (kitty, which idles around 85 MB, and the companion) is capped at `MemoryMax=128M`.
 - Frame rates: up to 60fps while walking or reacting (lowered to 30 or 20 by the CPU budget if needed); at most 6fps for small idle motion (breathing, blinking, sleep); no frame at all when nothing changes.
 - A poke or a mouse click shows its reaction within 100 ms.
 - No heap allocation per frame once the window size is stable (AGENTS.md rule).
 - Every frame wrapped in synchronized output; the terminal is restored on exit and on panic.
 - The rendering rules of AGENTS.md hold: time-based animation, fixed simulation timestep with interpolation, springs or easing for motion.
-- Transparent pixels are drawn with the terminal's default background, so foot's `colors.alpha` shows the desktop through them; dog pixels are opaque, without anti-aliasing.
-- The window runs in foot under `systemd-run --user` with `CPUQuota=10%` and `MemoryMax=64M`.
+- Transparent pixels are drawn with the terminal's default background, so kitty's `background_opacity 0` shows the desktop through them; dog pixels are opaque, without anti-aliasing.
+- The window runs in kitty under `systemd-run --user` with `CPUQuota=10%` and `MemoryMax=128M`.
 - New dependencies limited to small, pure-Rust crates (local time, randomness); third-party versions already in `Cargo.lock` do not change.
 - Clippy clean with `-D warnings` across the workspace.
 
@@ -98,7 +101,7 @@ Accepted when:
 - standing, the dog's bounding box is between 26 and 34 pixels wide and between 16 and 24 pixels tall
 - between any two poses, no part moves more than 2 pixels between two consecutive 60fps frames (a continuity test over every pose pair)
 - while walking, the planted foot moves less than 1 pixel against the ground per stride
-- the user, looking at it in foot, finds the dog reads as a cute dog and moves smoothly (manual)
+- the user, looking at it in kitty, finds the dog reads as a cute dog and moves smoothly (manual)
 
 ## S5 — Dog: behaviour
 
@@ -130,14 +133,14 @@ Accepted when:
 
 ## S8 — Window: launch on Hyprland and GNOME
 
-`idlefx-companion launch [--window COLSxROWS]` (or the shipped script it mirrors) starts the window as an isolated user unit: `systemd-run --user --unit=idlefx-companion --collect -p CPUQuota=10% -p MemoryMax=64M foot --config=<shipped foot.ini> --app-id=idlefx-companion --window-size-chars=<COLSxROWS> idlefx-companion`, with 64x16 by default. A second launch while it runs does nothing. The shipped `foot.ini` sets a fully transparent default background (`colors.alpha=0`), no client-side decorations, no padding. Hyprland: a shipped rules file to `source` makes the window float, pinned on every workspace, borderless, without shadow, blur or rounding, not focused on open, at the bottom-right of the screen; it matches by app id, so it works at any window size. GNOME: a small shipped GNOME Shell extension recognises the window by its app id and keeps it above other windows, on all workspaces, at the bottom-right; install steps are in the companion's AGENTS.md.
+`idlefx-companion launch [--window COLSxROWS]` starts the window as an isolated user unit: `systemd-run --user --unit=idlefx-companion --collect -p CPUQuota=10% -p MemoryMax=128M kitty --config=<shipped kitty.conf> --class=idlefx-companion -o initial_window_width=<COLS>c -o initial_window_height=<ROWS>c idlefx-companion`, with 64x16 by default. A second launch while it runs does nothing. The shipped `kitty.conf` sets a fully transparent default background (`background_opacity 0`), no window decorations, no padding; being passed with `--config`, it replaces the user's own kitty.conf for this window. Hyprland: a shipped rules file to `source` makes the window float, pinned on every workspace, borderless, without shadow, blur or rounding, not focused on open, at the bottom-right of the screen; it matches by class (kitty's `--class` is the Wayland app id), so it works at any window size. GNOME: a small shipped GNOME Shell extension recognises the window by its app id and keeps it above other windows, on all workspaces, at the bottom-right; install steps are in the companion's AGENTS.md.
 Accepted when:
-- `launch` starts the unit with `CPUQuota=10%` and `MemoryMax=64M`, visible in `systemctl --user show idlefx-companion`
-- `launch` passes `--window-size-chars=64x16` to foot by default, and `--window 80x20` passes `--window-size-chars=80x20`
+- `launch` starts the unit with `CPUQuota=10%` and `MemoryMax=128M`, visible in `systemctl --user show idlefx-companion`
+- `launch` passes `--class=idlefx-companion`, `initial_window_width=64c` and `initial_window_height=16c` to kitty by default, and `--window 80x20` passes `80c` and `20c`
 - a second `launch` exits 0 and leaves exactly one unit running
 - on Hyprland, the dog appears floating, borderless, on every workspace, with the desktop visible around it (manual)
 - on GNOME, with the extension enabled, the dog stays above other windows on every workspace, with the desktop visible around it (manual)
-- on the user's desktop, the unit's CPU stays under 10% while the dog walks, with motion still smooth (manual, `systemctl --user status idlefx-companion` or `systemd-cgtop`)
+- on the user's desktop, the unit's CPU stays under 10% while the dog walks, with motion still smooth (manual, `mise run stats` or `systemd-cgtop`)
 
 ## S9 — Docs: what was decided
 
@@ -150,8 +153,8 @@ Accepted when:
 ## Decisions
 
 - 2026-10-14: one dog size only (std). Large (2x) and XL (4x) were dropped: the sizing math (1 cell = 1x2 pixels, a 5x window around a 4x dog fills the screen) is easier to judge once the std dog is on screen; `launch --window` lets the user try window sizes meanwhile.
-- 2026-10-14: the 10% CPU ceiling covers the whole launched unit (foot and the companion), enforced by `CPUQuota=10%` and by the frame loop's CPU budget, which lowers the frame rate before the quota throttles.
+- 2026-10-14: the 10% CPU ceiling covers the whole launched unit (the terminal and the companion), enforced by `CPUQuota=10%` and by the frame loop's CPU budget, which lowers the frame rate before the quota throttles.
 - 2026-10-14: the first version of this spec gave a 48x14-cell window a 96x28-pixel canvas; a cell is 1 pixel wide and 2 tall, so that was wrong. The default window is now 64x16 cells (64x32 pixels).
-- 2026-10-15: `launch` defaults to kitty (`--class`, `-o initial_window_width=64c`, shipped `kitty.conf` with `background_opacity 0`); foot stays available with `IDLEFX_TERMINAL=foot`. kitty idles around 85 MB, so its unit gets `MemoryMax=128M`; foot keeps 64M.
+- 2026-10-15: the dog's window is kitty only (`--class`, `-o initial_window_width=64c`, shipped `kitty.conf` with `background_opacity 0`). The first version used foot; its config and flags are removed. kitty idles around 85 MB, so the unit gets `MemoryMax=128M`.
 
 ## Open questions
