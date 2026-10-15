@@ -49,6 +49,35 @@ done
 description = "Send an event to the running dog: hello, thinking, success, failure, commit"
 run = "cargo run --release -q -p idlefx-companion -- poke"
 
+[tasks.stats]
+description = "CPU and memory of the running dog every 2 s (and of its launched unit, foot included)"
+shell = "bash -c"
+run = """
+pid=$(pgrep -n -x idlefx-companio) || { echo 'idlefx-companion is not running'; exit 0; }
+hz=$(getconf CLK_TCK)
+cg=$(systemctl --user show -p ControlGroup --value idlefx-companion 2>/dev/null)
+[ -n "$cg" ] && [ -r "/sys/fs/cgroup$cg/cpu.stat" ] && cg="/sys/fs/cgroup$cg" || cg=
+ticks() { awk '{print $14 + $15}' "/proc/$pid/stat" 2>/dev/null; }
+usec() { awk '/^usage_usec/ {print $2}' "$cg/cpu.stat"; }
+echo "dog pid $pid${cg:+, unit idlefx-companion} (Ctrl-C to stop)"
+p0=$(ticks); [ -n "$cg" ] && u0=$(usec)
+while sleep 2; do
+  p1=$(ticks) || break
+  [ -n "$p1" ] || { echo 'idlefx-companion exited'; break; }
+  rss=$(awk '/^VmRSS/ {print $2}' "/proc/$pid/status")
+  line=$(awk -v a="$p0" -v b="$p1" -v hz="$hz" -v rss="$rss" \
+    'BEGIN {printf "dog  cpu %5.2f%%  rss %5.1f MB", (b - a) / hz / 2 * 100, rss / 1024}')
+  if [ -n "$cg" ]; then
+    u1=$(usec); mem=$(cat "$cg/memory.current")
+    line+=$(awk -v a="$u0" -v b="$u1" -v m="$mem" \
+      'BEGIN {printf "   |   unit  cpu %5.2f%% of 10%%  mem %5.1f MB of 64", (b - a) / 2e6 * 100, m / 1048576}')
+    u0=$u1
+  fi
+  echo "$(date +%T)  $line"
+  p0=$p1
+done
+"""
+
 [tasks.bench]
 description = "Frame rate and CPU: 300 plasma frames, then 10 s of the walking dog"
 raw = true
