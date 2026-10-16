@@ -61,8 +61,8 @@ running, so hooks never fail because of it. Unknown names are ignored.
 | Event | Sent by | Reaction |
 |---|---|---|
 | `hello` | Claude Code: SessionStart | happy greeting |
-| `thinking` | Claude Code: UserPromptSubmit | sits, head tilted, ears up, until the next event or 60 s |
-| `working` | Claude Code: PreToolUse | digs, until another event or 30 s after the last `working` |
+| `thinking` | Claude Code: UserPromptSubmit | sits, head tilted, ears up, until the next event or 20 s |
+| `working` | Claude Code: PreToolUse | digs, until another event or 20 s after the first `working`; more `working` is ignored until another event, so a long task gets one dig |
 | `alert` | Claude Code: Notification (`permission_prompt`) | stands tall, ears up, blinking `?`, until the next event or a click (10 min at most) |
 | `success` | Claude Code: Stop | happy |
 | `failure` | Claude Code: StopFailure | sad for a few seconds |

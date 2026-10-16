@@ -15,8 +15,9 @@ const NIGHT_START: f64 = 22.0 * 3600.0;
 const NIGHT_END: f64 = 7.0 * 3600.0;
 /// After a change of state, keep full frame rate this long for the blend.
 const BLEND: f64 = 1.2;
-/// Digging lasts this long after the last `working`.
-const WORKING: f64 = 30.0;
+/// The longest `thinking` or `working` lasts: Claude can run for minutes, the
+/// dog goes back to its routine after this.
+const BUSY: f64 = 20.0;
 /// The longest an alert waits for you.
 const ALERT: f64 = 600.0;
 /// Default work stretch before the first break reminder.
@@ -164,11 +165,11 @@ impl Poke {
     pub fn reaction(self) -> &'static str {
         match self {
             Poke::Hello => "happy greeting: fast wag and a little hop",
-            Poke::Thinking => "sits, head tilted, ears up, until the next event or 60 s",
+            Poke::Thinking => "sits, head tilted, ears up, until the next event or 20 s",
             Poke::Success => "happy",
             Poke::Failure => "sad for a few seconds: ears and tail down",
             Poke::Commit => "happy, with a ! above its head",
-            Poke::Working => "digs, until another event or 30 s after the last working",
+            Poke::Working => "digs, until another event or 20 s after the first working; more working is ignored until another event",
             Poke::Alert => "stands tall, ears up, a blinking ? above its head, until the next event or a click (10 min at most)",
             Poke::Yawn => "a long play-bow stretch",
             Poke::Bye => "lies down",
@@ -338,6 +339,9 @@ pub struct Companion {
     next_break: f64,
     /// The current stretch is a break reminder (the cup).
     reminding: bool,
+    /// The dog already dug for this task: further `working` is ignored until
+    /// another event.
+    dug: bool,
     transitions: Vec<Transition>,
 }
 
@@ -365,6 +369,7 @@ impl Companion {
             break_every: BREAK_EVERY,
             next_break: BREAK_EVERY,
             reminding: false,
+            dug: false,
             transitions: Vec::with_capacity(8),
         };
         c.clamp_x();
@@ -506,10 +511,17 @@ impl Companion {
     /// React to an input.
     pub fn input(&mut self, input: Input) {
         self.hold = false;
-        if input == Input::Poke(Poke::Working) && self.state == State::Working {
-            // Still working: dig on, without a new change of state.
-            self.until = self.t + WORKING;
-            return;
+        if let Input::Poke(p) = input {
+            if p == Poke::Working {
+                // One dig per task: a repeated `working` neither extends it
+                // nor starts it again.
+                if self.dug {
+                    return;
+                }
+                self.dug = true;
+            } else {
+                self.dug = false;
+            }
         }
         self.dog.stop();
         self.run_back = None;
@@ -616,8 +628,7 @@ impl Companion {
             State::Sleep => r.range(20.0, 60.0),
             State::Happy | State::Sad | State::Stretch => 3.0,
             State::Curious => 1.5,
-            State::Thinking => 60.0,
-            State::Working => WORKING,
+            State::Thinking | State::Working => BUSY,
             State::Alert => ALERT,
             // Walking states end on arrival.
             State::Wander | State::Walk | State::Run => f64::INFINITY,
@@ -761,19 +772,34 @@ mod tests {
     }
 
     #[test]
-    fn working_extends() {
+    fn working_is_capped() {
         let mut c = dog(AT_14);
         let mut seen = poke(&mut c, Poke::Working);
         seen.extend(run(&mut c, 10.0));
         seen.extend(poke(&mut c, Poke::Working));
-        seen.extend(run(&mut c, 10.0));
-        seen.extend(poke(&mut c, Poke::Working));
-        seen.extend(run(&mut c, 29.8));
-        assert_eq!(seen.iter().filter(|t| t.to == State::Working).count(), 1);
+        seen.extend(run(&mut c, 9.8));
         assert_eq!(seen.len(), 1, "{seen:?}");
         assert_eq!(c.state(), State::Working);
         let after = run(&mut c, 0.4);
         assert_eq!(after.first().map(|t| t.from), Some(Some(State::Working)));
+
+        // Claude still works: the dog stays in its routine.
+        assert!(poke(&mut c, Poke::Working).is_empty());
+        assert_ne!(c.state(), State::Working);
+        // A new task digs again.
+        poke(&mut c, Poke::Success);
+        poke(&mut c, Poke::Working);
+        assert_eq!(c.state(), State::Working);
+    }
+
+    #[test]
+    fn thinking_is_capped() {
+        let mut c = dog(AT_14);
+        poke(&mut c, Poke::Thinking);
+        assert!(run(&mut c, 19.8).is_empty());
+        assert_eq!(c.state(), State::Thinking);
+        run(&mut c, 0.4);
+        assert_ne!(c.state(), State::Thinking);
     }
 
     #[test]
